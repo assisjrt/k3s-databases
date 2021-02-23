@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: default
+  name: mongo
+  labels:
+    app: mongo
+spec:
+  serviceName: mongo
+  updateStrategy:
+    type: RollingUpdate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:4.4.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mongo
+              containerPort: 27017
+          envFrom:
+            - configMapRef:
+                name: mongo-config
+          readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  #!/bin/sh
+                  set -eu
+
+                  mongo -u $MONGO_INITDB_ROOT_USERNAME -p $MONGO_INITDB_ROOT_PASSWORD --port 27017 --eval "db.adminCommand('ping')"
+
+                  if test $? -ne 0; then
+                    exit 1
+                  fi
+
+                  exit 0
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  #!/bin/sh
+                  set -eu
+
+                  mongo -u $MONGO_INITDB_ROOT_USERNAME -p $MONGO_INITDB_ROOT_PASSWORD --port 27017 --eval "db.adminCommand('ping')"
+
+                  if test $? -ne 0; then
+                    exit 1
+                  fi
+
+                  exit 0
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "250Mi"
+            limits:
+              cpu: "300m"
+              memory: "500Mi"
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+      restartPolicy: Always
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi

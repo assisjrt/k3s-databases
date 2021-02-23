@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: default
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  updateStrategy:
+    type: RollingUpdate
+  # replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:9.6-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+          readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  #!/bin/sh
+                  set -eu
+
+                  /usr/local/bin/pg_isready -U $POSTGRES_USER -h localhost -p 5432
+
+                  if test $? -ne 0; then
+                    exit 1
+                  fi
+
+                  exit 0
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  #!/bin/sh
+                  set -eu
+
+                  /usr/local/bin/pg_isready -U $POSTGRES_USER -h localhost -p 5432
+
+                  if test $? -ne 0; then
+                    exit 1
+                  fi
+
+                  exit 0
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "250Mi"
+            limits:
+              cpu: "300m"
+              memory: "500Mi"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      restartPolicy: Always
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi

@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: default
+  name: mariadb
+  labels:
+    app: mariadb
+spec:
+  serviceName: mariadb
+  updateStrategy:
+    type: RollingUpdate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:10.5.8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mariadb
+              containerPort: 3306
+          envFrom:
+            - configMapRef:
+                name: mariadb-config
+          readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  #!/bin/sh
+                  set -eu
+
+                  /usr/bin/mysqladmin -u "$MYSQL_USER" -p -h 127.0.0.1 --password="$MYSQL_PASSWORD" ping
+
+                  if test $? -ne 0; then
+                    exit 1
+                  fi
+
+                  exit 0
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  #!/bin/sh
+                  set -eu
+
+                  /usr/bin/mysqladmin -u "$MYSQL_USER" -p -h 127.0.0.1 --password="$MYSQL_PASSWORD" ping
+
+                  if test $? -ne 0; then
+                    exit 1
+                  fi
+
+                  exit 0
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "250Mi"
+            limits:
+              cpu: "300m"
+              memory: "500Mi"
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+      restartPolicy: Always
+  volumeClaimTemplates:
+    - metadata:
+        name: mariadb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi
